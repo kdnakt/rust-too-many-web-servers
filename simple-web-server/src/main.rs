@@ -3,7 +3,10 @@ use std::net::{
     TcpStream,
 };
 use std::io;
-use std::io::Read;
+use std::io::{
+    Read,
+    Write,
+};
 
 fn main() {
     let listener = TcpListener::bind("localhost:3000").unwrap();
@@ -42,6 +45,35 @@ fn handle_connection(mut connection: TcpStream) -> io::Result<()> {
 
     let request = String::from_utf8_lossy(&request[..read]);
     println!("{:?}", request);
+
+    // Hello World! in HTTP
+    let response = concat!(
+        "HTTP/1.1 200 OK\r\n",
+        "Content-Length: 12\r\n",
+        "Connection: close\r\n",
+        "\r\n",
+        "Hello World!"
+    );
+
+    let mut written = 0;
+
+    loop {
+        // write the remaining response bytes
+        let num_bytes = connection.write(response[written..].as_bytes())?;
+
+        // the client disconnected
+        if num_bytes == 0 {
+            println!("client disconnected unexpectedly");
+            return Ok(());
+        }
+
+        written += num_bytes;
+
+        // have we written the whole response yet?
+        if written == response.len() {
+            break;
+        }
+    }
 
     Ok(())
 }
