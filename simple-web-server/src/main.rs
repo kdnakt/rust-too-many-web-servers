@@ -24,7 +24,6 @@ fn handle_connection(mut connection: TcpStream) -> io::Result<()> {
     loop {
         // try reading from the stream
         let num_bytes = connection.read(&mut request[read..])?;
-        println!("{:?}", request);
 
         // the client disconnected
         if num_bytes == 0 {
@@ -40,6 +39,9 @@ fn handle_connection(mut connection: TcpStream) -> io::Result<()> {
             break;
         }
     }
+
+    let request = String::from_utf8_lossy(&request[..read]);
+    println!("{:?}", request);
 
     Ok(())
 }
