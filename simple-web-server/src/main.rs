@@ -26,6 +26,12 @@ fn handle_connection(mut connection: TcpStream) -> io::Result<()> {
         let num_bytes = connection.read(&mut request[read..])?;
         println!("{:?}", request);
 
+        // the client disconnected
+        if num_bytes == 0 {
+            println!("client disconnected unexpectedly");
+            return Ok(());
+        }
+
         // keep track of how many bytes we've read
         read += num_bytes;
 
