@@ -75,5 +75,6 @@ fn handle_connection(mut connection: TcpStream) -> io::Result<()> {
         }
     }
 
-    Ok(())
+    // flush the response to ensure
+    connection.flush()
 }
