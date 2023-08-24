@@ -14,9 +14,12 @@ fn main() {
     loop {
         let (connection, _) = listener.accept().unwrap();
 
-        if let Err(e) = handle_connection(connection) {
-            println!("failed to handle connection: {e}");
-        }
+        // spawn a thread to handle each connection
+        std::thread::spawn(|| {
+            if let Err(e) = handle_connection(connection) {
+                println!("failed to handle connection: {e}");
+            }
+        });
     }
 }
 
