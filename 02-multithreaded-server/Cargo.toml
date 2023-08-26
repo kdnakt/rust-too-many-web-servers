@@ -1,5 +1,5 @@
 [package]
-name = "02-multithreaded-server"
+name = "multithreaded-server"
 version = "0.1.0"
 edition = "2021"
 
