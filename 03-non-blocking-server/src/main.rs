@@ -14,7 +14,15 @@ fn main() {
     listener.set_nonblocking(true).unwrap();
 
     loop {
-        let (connection, _) = listener.accept().unwrap();
+        let connection = match listener.accept() {
+            Ok((connection, _)) => connection,
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                // the operation was not performed.
+                // just spin until the socket becomes ready.
+                continue;
+            },
+            Err(e) => panic!("{e}"),
+        };
         // switch to using non-blocking I/O
         connection.set_nonblocking(true).unwrap();
 
