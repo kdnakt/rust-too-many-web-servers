@@ -10,9 +10,13 @@ use std::io::{
 
 fn main() {
     let listener = TcpListener::bind("localhost:3000").unwrap();
+    // switch to using non-blocking I/O
+    listener.set_nonblocking(true).unwrap();
 
     loop {
         let (connection, _) = listener.accept().unwrap();
+        // switch to using non-blocking I/O
+        connection.set_nonblocking(true).unwrap();
 
         // spawn a thread to handle each connection
         std::thread::spawn(|| {
