@@ -8,34 +8,80 @@ use std::io::{
     Write,
 };
 
+enum ConnectionState {
+    Read {
+        request: [u8; 1024],
+        read: usize
+    },
+    Write {
+        response: &'static [u8],
+        written: usize,
+    },
+    Flush
+}
+
 fn main() {
     let listener = TcpListener::bind("localhost:3000").unwrap();
     // switch to using non-blocking I/O
     listener.set_nonblocking(true).unwrap();
 
+    // keep track of all our active connections
+    let mut connections = Vec::new();
+
     loop {
-        let connection = match listener.accept() {
-            Ok((connection, _)) => connection,
+        match listener.accept() {
+            Ok((connection, _)) => {
+                // switch to using non-blocking I/O
+                connection.set_nonblocking(true).unwrap();
+                let state = ConnectionState::Read {
+                    request: [0u8; 1024],
+                    read: 0,
+                };
+                connections.push((connection, state));
+            },
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 // the operation was not performed.
                 // just spin until the socket becomes ready.
                 continue;
             },
             Err(e) => panic!("{e}"),
-        };
-        // switch to using non-blocking I/O
-        connection.set_nonblocking(true).unwrap();
+        }
 
-        // spawn a thread to handle each connection
-        std::thread::spawn(|| {
-            if let Err(e) = handle_connection(connection) {
-                println!("failed to handle connection: {e}");
+        'next: for (connection, state) in connections.iter_mut() {
+            if let ConnectionState::Read { request, read } = state {
+                loop {
+                    match connection.read(&mut request[*read..]) {
+                        Ok(n) => {
+                            // keep track of how many bytes we've read
+                            *read += n
+                        },
+                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            // not ready yet, move on to the next connection
+                            continue 'next;
+                        },
+                        Err(e) => panic!("{e}"),
+                    }
+
+                    // the end of the request
+                    if request.get(*read - 4..*read) == Some(b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                // we're done
+                let request = String::from_utf8_lossy(&request[..read]);
+                println!("{request}");
             }
-        });
+            // spawn a thread to handle each connection
+            std::thread::spawn(|| {
+                if let Err(e) = handle_connection(connection) {
+                    println!("failed to handle connection: {e}");
+                }
+            });
+        }
     }
 }
 
-fn handle_connection(mut connection: TcpStream) -> io::Result<()> {
+fn handle_connection(connection: &mut TcpStream) -> io::Result<()> {
     let mut read = 0;
     let mut request = [0u8; 1024];
 
@@ -49,17 +95,10 @@ fn handle_connection(mut connection: TcpStream) -> io::Result<()> {
             return Ok(());
         }
 
-        // keep track of how many bytes we've read
         read += num_bytes;
 
-        // the end of the request
-        if request.get(read - 4..read) == Some(b"\r\n\r\n") {
-            break;
-        }
     }
 
-    let request = String::from_utf8_lossy(&request[..read]);
-    println!("{:?}", request);
 
     // Hello World! in HTTP
     let response = concat!(
