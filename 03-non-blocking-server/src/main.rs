@@ -70,13 +70,13 @@ fn main() {
                 // we're done
                 let request = String::from_utf8_lossy(&request[..read]);
                 println!("{request}");
+                // spawn a thread to handle each connection
+                std::thread::spawn(|| {
+                    if let Err(e) = handle_connection(connection) {
+                        println!("failed to handle connection: {e}");
+                    }
+                });
             }
-            // spawn a thread to handle each connection
-            std::thread::spawn(|| {
-                if let Err(e) = handle_connection(connection) {
-                    println!("failed to handle connection: {e}");
-                }
-            });
         }
     }
 }
