@@ -47,10 +47,17 @@ fn main() {
             Err(e) => panic!("{e}"),
         }
 
-        'next: for (connection, state) in connections.iter_mut() {
+        let mut completed = Vec::new();
+
+        'next: for (i, (connection, state)) in connections.iter_mut().enumerate() {
             if let ConnectionState::Read { request, read } = state {
                 loop {
                     match connection.read(&mut request[*read..]) {
+                        Ok(0) => {
+                            println!("client disconnected unexpectedly");
+                            completed.push(i);
+                            continue 'next;
+                        }
                         Ok(n) => {
                             // keep track of how many bytes we've read
                             *read += n
