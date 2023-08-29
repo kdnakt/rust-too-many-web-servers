@@ -77,6 +77,12 @@ fn main() {
                     }
                 });
             }
+            if let ConnectionState::Write { response, written } = state {
+                // TODO:
+            }
+            if let ConnectionState::Flush = state {
+                // TODO
+            }
         }
     }
 }
