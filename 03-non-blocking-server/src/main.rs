@@ -91,6 +91,11 @@ fn main() {
                 // TODO
             }
         }
+
+        // iterate in reverse order to preserve the indices
+        for i in completed.into_vec().rev() {
+            connections.remove(i);
+        }
     }
 }
 
