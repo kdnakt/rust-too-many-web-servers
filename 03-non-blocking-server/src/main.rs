@@ -118,7 +118,15 @@ fn main() {
                 *state = ConnectionState::Flush;
             }
             if let ConnectionState::Flush = state {
-                // TODO
+                match connection.flush() {
+                    Ok(_) => {
+                        completed.push(i);
+                    },
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        continue 'next;
+                    }
+                    Err(e) => panic!("{e}"),
+                }
             }
         }
 
