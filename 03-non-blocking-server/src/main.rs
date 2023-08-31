@@ -77,15 +77,45 @@ fn main() {
                 // we're done
                 let request = String::from_utf8_lossy(&request[..read]);
                 println!("{request}");
-                // spawn a thread to handle each connection
-                std::thread::spawn(|| {
-                    if let Err(e) = handle_connection(connection) {
-                        println!("failed to handle connection: {e}");
-                    }
-                });
+
+                // move into the write state
+                // Hello World! in HTTP
+                let response = concat!(
+                    "HTTP/1.1 200 OK\r\n",
+                    "Content-Length: 12\r\n",
+                    "Connection: close\r\n",
+                    "\r\n",
+                    "Hello World!"
+                );
+                *state = ConnectionState::Write {
+                    response: response.as_bytes(),
+                    written: 0,
+                };
             }
             if let ConnectionState::Write { response, written } = state {
-                // TODO:
+                loop {
+                    match connection.write(&response[*written..]) {
+                        Ok(0) => {
+                            println!("client disconnected unexpectedly");
+                            completed.push(i);
+                            continue 'next;
+                        }
+                        Ok(n) => {
+                            *written += n;
+                        }
+                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            // not ready yet, move on to the next connection
+                            continue 'next;
+                        }
+                        Err(e) => panic!("{e}"),
+                    }
+                    // did we write the whole response yet?
+                    if *written == response.len() {
+                        break;
+                    }
+                }
+                // successfully wrote the response, try flushing next
+                *state = ConnectionState::Flush;
             }
             if let ConnectionState::Flush = state {
                 // TODO
