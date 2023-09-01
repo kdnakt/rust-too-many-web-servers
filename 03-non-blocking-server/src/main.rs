@@ -75,7 +75,7 @@ fn main() {
                     }
                 }
                 // we're done
-                let request = String::from_utf8_lossy(&request[..read]);
+                let request = String::from_utf8_lossy(&request[..*read]);
                 println!("{request}");
 
                 // move into the write state
