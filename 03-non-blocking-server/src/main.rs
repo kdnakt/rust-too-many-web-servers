@@ -131,7 +131,7 @@ fn main() {
         }
 
         // iterate in reverse order to preserve the indices
-        for i in completed.into_vec().rev() {
+        for i in completed.into_iter().rev() {
             connections.remove(i);
         }
     }
