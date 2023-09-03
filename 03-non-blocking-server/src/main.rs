@@ -38,11 +38,7 @@ fn main() {
                 };
                 connections.push((connection, state));
             },
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // the operation was not performed.
-                // just spin until the socket becomes ready.
-                continue;
-            },
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {},
             Err(e) => panic!("{e}"),
         }
 
