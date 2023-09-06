@@ -29,7 +29,9 @@ fn main() {
                 match listener.accept() {
                     Ok((connection, _)) => {
                         connection.set_nonblocking(true).unwrap();
-                        // TODO
+                        // register the connection with epoll
+                        let event = Event::new(Events::EPOLLIN | Events::EPOLLOUT, fd as _);
+                        epoll::ctl(epoll, EPOLL_CTL_ADD, fd, event).unwrap();
                     }
                     Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
                     Err(e) => panic!("{e}"),
