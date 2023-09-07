@@ -6,6 +6,10 @@ use epoll::{
 use std::os::fd::AsRawFd;
 use std::net::TcpListener;
 use std::io;
+use std::io::{
+    Read,
+    Write,
+};
 use std::collections::HashMap;
 
 enum ConnectionState {
@@ -32,8 +36,8 @@ fn main() {
     let mut connections = HashMap::new();
     loop {
         let mut events = [Event::new(Events::empty(), 0); 1024];
-        let timeout = -1; // block forever, until something happens
-        let num_events = epoll::wait(epoll, timeout, &mut events).unwrap();
+        let num_events = epoll::wait(epoll, 0, &mut events).unwrap();
+        let mut completed = Vec::new();
 
         'next: for event in &events[..num_events] {
             let fd = event.data as i32;
@@ -60,6 +64,80 @@ fn main() {
             }
             // otherwise, a connection must be ready
             let (connection, state) = connections.get_mut(&fd).unwrap();
+
+            if let ConnectionState::Read { request, read } = state {
+                loop {
+                    match connection.read(&mut request[*read..]) {
+                        Ok(0) => {
+                            println!("client connected unexpectedly");
+                            completed.push(fd);
+                            continue 'next;
+                        }
+                        Ok(n) => *read += n,
+                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue 'next,
+                        Err(e) => panic!("{e}"),
+                    }
+                    if request.get(*read - 4..*read) == Some(b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8_lossy(&request[..*read]);
+                println!("{request}");
+                let response = concat!(
+                    "HTTP/1.1 200 OK\r\n",
+                    "Content-Length: 12\r\n",
+                    "Connection: close\r\n",
+                    "\r\n",
+                    "Hello world!"
+                );
+                *state = ConnectionState::Write {
+                    response: response.as_bytes(),
+                    written: 0
+                };
+            }
+
+            if let ConnectionState::Write { response, written } = state {
+                loop {
+                    match connection.write(&response[*written..]) {
+                        Ok(0) => {
+                            println!("client disconnected unexpectedly");
+                            completed.push(fd);
+                            continue 'next;
+                        }
+                        Ok(n) => {
+                            *written += n;
+                        }
+                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            // not ready yet, move on to the next connection
+                            continue 'next;
+                        }
+                        Err(e) => panic!("{e}"),
+                    }
+                    if *written == response.len() {
+                        break;
+                    }
+                }
+                *state = ConnectionState::Flush;
+            }
+
+            if let ConnectionState::Flush = state {
+                match connection.flush() {
+                    Ok(_) => {
+                        completed.push(fd); // 👈
+                    },
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        // not ready yet, move on to the next connection
+                        continue 'next;
+                    }
+                    Err(e) => panic!("{e}"),
+                }
+            }
+        }
+
+        for fd in completed {
+            let (connection, _state) = connections.remove(&fd).unwrap();
+            // unregister from epoll
+            drop(connection);
         }
     }
 }
