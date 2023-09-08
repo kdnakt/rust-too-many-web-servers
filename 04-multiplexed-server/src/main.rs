@@ -48,6 +48,7 @@ fn main() {
                     Ok((connection, _)) => {
                         connection.set_nonblocking(true).unwrap();
                         // register the connection with epoll
+                        let fd = connection.as_raw_fd();
                         let event = Event::new(Events::EPOLLIN | Events::EPOLLOUT, fd as _);
                         epoll::ctl(epoll, EPOLL_CTL_ADD, fd, event).unwrap();
 
