@@ -3,10 +3,21 @@ use std::collections::HashMap;
 // fn spawn<T: Task>(task: T);
 trait Task {}
 
+// simple callback
+#[derive(Clone)]
+struct Waker(Arc<dyn Fn() + Send + Sync>);
+
+impl Waker {
+    fn wake(&self) {
+        (self.0)()
+    }
+}
+
 trait Future {
     type Output;
 
     fn poll(&mut self) -> Option<Self::Output>;
+    fn poll(&mut self, waker: Waker) -> Option<Self::Output>;
 }
 
 impl Scheduler {
