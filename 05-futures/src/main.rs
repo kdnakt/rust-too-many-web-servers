@@ -43,6 +43,25 @@ impl Scheduler {
     }
 }
 
+struct Reactor {
+    epoll: RawFd,
+    tasks: RefCell<HashMap<RawFd, Waker>>,
+}
+
+
+thread_local! {
+    static REACTOR: Reactor = Reactor::new();
+}
+
+impl Reactor {
+    pub fn new() -> Reactor {
+        Reactor {
+            epoll: epoll::create(false).unwrap(),
+            tasks: RefCell::new(HashMap::new()),
+        }
+    }
+}
+
 fn main() {
     println!("Hello, world!");
 }
