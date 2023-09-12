@@ -60,6 +60,14 @@ impl Reactor {
             tasks: RefCell::new(HashMap::new()),
         }
     }
+
+    /// Add a file descriptor with read and write interest.
+    /// `waker` will be called when the descriptor becomes ready
+    pub fn add(&self, fd: RawFd, waker: Waker) {
+        let event = epoll::Event::new(Events::EPOLLIN | Events::EPOLLOUT, fd as u64);
+        epoll::ctl(self.epoll, EPOLL_CTL_ADD, fd, event).unwrap();
+        self.tasks.borrow_mut().insert(fd, waker);
+    }
 }
 
 fn main() {
