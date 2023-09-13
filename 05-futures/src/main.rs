@@ -74,6 +74,22 @@ impl Reactor {
     pub fn remove(&self, fd: RawFd) {
         self.tasks.borrow_mut().remove(&fd);
     }
+
+    /// Drive tasks forward, blocking forever until an event arrives
+    pub fn wait(&self) {
+        let mut [Event::New(Events::empty(), 0); 1024];
+        let timeout = -1; // forever
+        let num_events = epoll::wait(self.epoll, timeout, &mut events).unwrap();
+
+        for event in &events[..num_events] {
+            let fd = event.data as i32;
+
+            // wake the task
+            if let Some(waker) = self.tasks.borrow().get(&fd) {
+                waker.wake();
+            }
+        }
+    }
 }
 
 fn main() {
