@@ -68,6 +68,12 @@ impl Reactor {
         epoll::ctl(self.epoll, EPOLL_CTL_ADD, fd, event).unwrap();
         self.tasks.borrow_mut().insert(fd, waker);
     }
+
+    /// Remove the given descriptor from epoll.
+    /// It will no longer receive any notifications.
+    pub fn remove(&self, fd: RawFd) {
+        self.tasks.borrow_mut().remove(&fd);
+    }
 }
 
 fn main() {
