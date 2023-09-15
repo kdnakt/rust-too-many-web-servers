@@ -28,24 +28,32 @@ static SCHEDULER: Scheduler = Scheduler {};
 
 #[derive(Default)]
 impl Scheduler {
-    fn spawn<T>(&self, mut future: T) {
-        let id = rand();
-        // poll the future once to get it started, passing in it's ID
-        future.poll(event.id);
-        // store the future
-        self.tasks.insert(id, future);
+    // fn spawn<T>(&self, mut future: T) {
+    //     let id = rand();
+    //     // poll the future once to get it started, passing in it's ID
+    //     future.poll(event.id);
+    //     // store the future
+    //     self.tasks.insert(id, future);
+    // }
+    pub fn spawn(&self, task: impl Future<Output = ()> + Send + 'static) {
+        self.tasks.lock().unwrap().push(Box::new(task));
     }
 
-    fn run(&self) {
-        // loop {
-        //     for future in &self.tasks {
-        //         future.poll();
-        //     }
-        // }
-        for event in epoll_events {
-            // poll the future associated with this event
-            let future = self.tasks.get(&event.id).unwrap();
-            future.poll(event.id);
+    // fn run(&self) {
+    //     // loop {
+    //     //     for future in &self.tasks {
+    //     //         future.poll();
+    //     //     }
+    //     // }
+    //     for event in epoll_events {
+    //         // poll the future associated with this event
+    //         let future = self.tasks.get(&event.id).unwrap();
+    //         future.poll(event.id);
+    //     }
+    // }
+    pub fn run(&self) {
+        for task in tasks.lock().unwrap().borrow_mut().iter_mut() {
+            // TODO:
         }
     }
 }
