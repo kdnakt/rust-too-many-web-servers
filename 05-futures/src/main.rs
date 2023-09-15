@@ -20,6 +20,13 @@ trait Future {
     fn poll(&mut self, waker: Waker) -> Option<Self::Output>;
 }
 
+struct Scheduler {
+    tasks: Mutex<Vec<Box<dyn Future + Send>>>,
+}
+
+static SCHEDULER: Scheduler = Scheduler {};
+
+#[derive(Default)]
 impl Scheduler {
     fn spawn<T>(&self, mut future: T) {
         let id = rand();
