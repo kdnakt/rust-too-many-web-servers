@@ -66,8 +66,13 @@ impl Scheduler {
             let task = self.runnable.lock().unwrap().pop_front();
 
             if let Some(task) = task {
+                let t2 = task.clone();
+                // create a waker that pushes the task back on
+                let wake = Arc::new(move || {
+                    SCHEDULER.runnable.lock().unwrap().push_back(t2.clone());
+                });
                 // and poll it
-                task.try_lock().unwrap().poll(waker);
+                task.try_lock().unwrap().poll(Waker(wake));
             }
         }
     }
