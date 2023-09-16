@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 // fn spawn<T: Task>(task: T);
 trait Task {}
@@ -20,8 +21,12 @@ trait Future {
     fn poll(&mut self, waker: Waker) -> Option<Self::Output>;
 }
 
+type SharedTask = Arc<Mutex<dyn Future<Output = ()> + Send>>;
+
+#[derive(Default)]
 struct Scheduler {
-    tasks: Mutex<Vec<Box<dyn Future + Send>>>,
+    // tasks: Mutex<Vec<Box<dyn Future + Send>>>,
+    runnble: Mutex<VecDeque<SharedTask>>,
 }
 
 static SCHEDULER: Scheduler = Scheduler {};
