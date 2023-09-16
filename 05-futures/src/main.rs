@@ -41,7 +41,8 @@ impl Scheduler {
     //     self.tasks.insert(id, future);
     // }
     pub fn spawn(&self, task: impl Future<Output = ()> + Send + 'static) {
-        self.tasks.lock().unwrap().push(Box::new(task));
+        // self.tasks.lock().unwrap().push(Box::new(task));
+        self.runnable.lock().unwrap().push_back(Arc::new(Mutex::new(task)));
     }
 
     // fn run(&self) {
@@ -57,8 +58,17 @@ impl Scheduler {
     //     }
     // }
     pub fn run(&self) {
-        for task in tasks.lock().unwrap().borrow_mut().iter_mut() {
-            // TODO:
+        // for task in tasks.lock().unwrap().borrow_mut().iter_mut() {
+        //     // TODO:
+        // }
+        loop {
+            // pop a runnable task off the queue
+            let task = self.runnable.lock().unwrap().pop_front();
+
+            if let Some(task) = task {
+                // and poll it
+                task.try_lock().unwrap().poll(waker);
+            }
         }
     }
 }
