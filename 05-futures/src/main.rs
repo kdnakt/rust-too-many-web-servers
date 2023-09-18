@@ -62,18 +62,19 @@ impl Scheduler {
         //     // TODO:
         // }
         loop {
-            // pop a runnable task off the queue
-            let task = self.runnable.lock().unwrap().pop_front();
-
-            if let Some(task) = task {
+            loop {
+                // pop a runnable task off the queue
+                let task = self.runnable.lock().unwrap().pop_front() else { break };
                 let t2 = task.clone();
                 // create a waker that pushes the task back on
                 let wake = Arc::new(move || {
                     SCHEDULER.runnable.lock().unwrap().push_back(t2.clone());
                 });
                 // and poll it
-                task.try_lock().unwrap().poll(Waker(wake));
+                task.lock().unwrap().poll(Waker(wake));
             }
+            // if there are no runnable tasks, block on epoll until something becomes ready
+            REACTOR.with(|reactor| reactor.wait());
         }
     }
 }
