@@ -1,8 +1,19 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use epoll::{
+    ControlOptions::EPOLL_CTL_ADD,
+    Event,
+    Events,
+};
+use std::sync::{
+    Arc,
+    Mutex,
+};
+use std::os::fd::RawFd;
+use std::cell::RefCell;
 
 // fn spawn<T: Task>(task: T);
-trait Task {}
+// trait Task {}
 
 // simple callback
 #[derive(Clone)]
@@ -17,7 +28,7 @@ impl Waker {
 trait Future {
     type Output;
 
-    fn poll(&mut self) -> Option<Self::Output>;
+    // fn poll(&mut self) -> Option<Self::Output>;
     fn poll(&mut self, waker: Waker) -> Option<Self::Output>;
 }
 
@@ -26,10 +37,12 @@ type SharedTask = Arc<Mutex<dyn Future<Output = ()> + Send>>;
 #[derive(Default)]
 struct Scheduler {
     // tasks: Mutex<Vec<Box<dyn Future + Send>>>,
-    runnble: Mutex<VecDeque<SharedTask>>,
+    runnable: Mutex<VecDeque<SharedTask>>,
 }
 
-static SCHEDULER: Scheduler = Scheduler {};
+static SCHEDULER: Scheduler = Scheduler {
+    runnable: Mutex::new(VecDeque::new()),
+};
 
 #[derive(Default)]
 impl Scheduler {
@@ -71,7 +84,7 @@ impl Scheduler {
                     SCHEDULER.runnable.lock().unwrap().push_back(t2.clone());
                 });
                 // and poll it
-                task.lock().unwrap().poll(Waker(wake));
+                task.expect("poll it").lock().unwrap().poll(Waker(wake));
             }
             // if there are no runnable tasks, block on epoll until something becomes ready
             REACTOR.with(|reactor| reactor.wait());
@@ -113,7 +126,7 @@ impl Reactor {
 
     /// Drive tasks forward, blocking forever until an event arrives
     pub fn wait(&self) {
-        let mut [Event::New(Events::empty(), 0); 1024];
+        let mut events = [Event::new(Events::empty(), 0); 1024];
         let timeout = -1; // forever
         let num_events = epoll::wait(self.epoll, timeout, &mut events).unwrap();
 
