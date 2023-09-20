@@ -44,7 +44,6 @@ static SCHEDULER: Scheduler = Scheduler {
     runnable: Mutex::new(VecDeque::new()),
 };
 
-#[derive(Default)]
 impl Scheduler {
     // fn spawn<T>(&self, mut future: T) {
     //     let id = rand();
@@ -81,7 +80,7 @@ impl Scheduler {
                 let t2 = task.clone();
                 // create a waker that pushes the task back on
                 let wake = Arc::new(move || {
-                    SCHEDULER.runnable.lock().unwrap().push_back(t2.clone());
+                    SCHEDULER.runnable.lock().unwrap().push_back(t2.clone().unwrap());
                 });
                 // and poll it
                 task.expect("poll it").lock().unwrap().poll(Waker(wake));
