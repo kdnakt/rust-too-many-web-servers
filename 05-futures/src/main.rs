@@ -142,4 +142,19 @@ impl Reactor {
 
 fn main() {
     println!("Hello, world!");
+    SCHEDULER.spawn(Main::Start);
+    SCHEDULER.run();
+}
+
+// An Async Server
+enum Main {
+    Start,
+}
+
+impl Future for Main {
+    type Output = ();
+
+    fn poll(&mut self, waker: Waker) -> Option<()> {
+        None
+    }
 }
