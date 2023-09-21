@@ -11,6 +11,7 @@ use std::sync::{
 };
 use std::os::fd::RawFd;
 use std::cell::RefCell;
+use std::net::TcpListener;
 
 // fn spawn<T: Task>(task: T);
 // trait Task {}
@@ -142,11 +143,13 @@ impl Reactor {
 
 fn main() {
     println!("Hello, world!");
+    // write the tasks that our scheduler is going to run
     SCHEDULER.spawn(Main::Start);
     SCHEDULER.run();
 }
 
 // An Async Server
+// enum as state mashines
 enum Main {
     Start,
 }
@@ -155,6 +158,10 @@ impl Future for Main {
     type Output = ();
 
     fn poll(&mut self, waker: Waker) -> Option<()> {
+        if let Main::Start = self {
+            let listener = TcpListener::bind("localhost:3000").unwrap();
+            listener.set_nonblocking(true).unwrap();
+        }
         None
     }
 }
