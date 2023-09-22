@@ -9,7 +9,10 @@ use std::sync::{
     Arc,
     Mutex,
 };
-use std::os::fd::RawFd;
+use std::os::fd::{
+    AsRawFd,
+    RawFd,
+};
 use std::cell::RefCell;
 use std::net::TcpListener;
 
@@ -161,6 +164,10 @@ impl Future for Main {
         if let Main::Start = self {
             let listener = TcpListener::bind("localhost:3000").unwrap();
             listener.set_nonblocking(true).unwrap();
+            // register the listener with epoll
+            REACTOR.with(|reactor| {
+                reactor.add(listener.as_raw_fd(), waker);
+            });
         }
         None
     }
