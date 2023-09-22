@@ -155,6 +155,9 @@ fn main() {
 // enum as state mashines
 enum Main {
     Start,
+    Accept {
+        listener: TcpListener,
+    },
 }
 
 impl Future for Main {
@@ -168,7 +171,21 @@ impl Future for Main {
             REACTOR.with(|reactor| {
                 reactor.add(listener.as_raw_fd(), waker);
             });
+            *self = Main::Accept { listener };
         }
+
+        if let Main::Accept { listener } = self {
+            match listener.accept() {
+                Ok((connection, _)) => {
+                    // do something
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    return None;
+                }
+                Err(e) => panic!("{e}"),
+            }
+        }
+
         None
     }
 }
