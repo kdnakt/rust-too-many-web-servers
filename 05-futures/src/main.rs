@@ -14,7 +14,10 @@ use std::os::fd::{
     RawFd,
 };
 use std::cell::RefCell;
-use std::net::TcpListener;
+use std::net::{
+    TcpListener,
+    TcpStream,
+};
 
 // fn spawn<T: Task>(task: T);
 // trait Task {}
@@ -160,6 +163,15 @@ enum Main {
     },
 }
 
+struct Handler {
+    connection: TcpStream,
+    state: HandlerState,
+}
+
+enum HandlerState {
+    Start,
+}
+
 impl Future for Main {
     type Output = ();
 
@@ -177,7 +189,12 @@ impl Future for Main {
         if let Main::Accept { listener } = self {
             match listener.accept() {
                 Ok((connection, _)) => {
-                    // do something
+                    connection.set_nonblocking(true).unwrap();
+
+                    SCHEDULER.spawn(Handler {
+                        connection,
+                        state: HandlerState::Start,
+                    })
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     return None;
