@@ -18,6 +18,10 @@ use std::net::{
     TcpListener,
     TcpStream,
 };
+use std::io::{
+    ErrorKind,
+    Read,
+};
 
 // fn spawn<T: Task>(task: T);
 // trait Task {}
@@ -174,6 +178,10 @@ enum HandlerState {
         request: [u8; 1024],
         read: usize,
     },
+    Write {
+        response: &'static [u8],
+        written: usize,
+    },
 }
 
 impl Future for Main {
@@ -224,6 +232,40 @@ impl Future for Handler {
             self.state = HandlerState::Read {
                 request: [0u8; 1024],
                 read: 0,
+            };
+        }
+
+        if let HandlerState::Read { request, read } = &mut self.state {
+            loop {
+                match self.connection.read(&mut request[*read..]) {
+                    Ok(0) => {
+                        println!("client disconnected unexpectedly");
+                        return Some(());
+                    }
+                    Ok(n) => *read += n,
+                    // we can simply return None, knowing that we'll run again once our future is woken.
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
+                    Err(e) => panic!("{e}"),
+                }
+
+                let read = *read;
+                if read >= 4 && &request[read -4..read] == b"\r\n\r\n" {
+                    break;
+                }
+            }
+            let request = String::from_utf8_lossy(&request[..*read]);
+            println!("{}", request);
+
+            let response = concat!(
+                "HTTP/1.1 200 OK\r\n",
+                "Content-Length: 12\r\n",
+                "Connection: close\r\n",
+                "\r\n",
+                "Hello world!"
+            );
+            self.state = HandlerState::Write {
+                response: response.as_bytes(),
+                written: 0,
             };
         }
 
