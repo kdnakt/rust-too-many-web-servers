@@ -170,6 +170,10 @@ struct Handler {
 
 enum HandlerState {
     Start,
+    Read {
+        request: [u8; 1024],
+        read: usize,
+    },
 }
 
 impl Future for Main {
@@ -201,6 +205,26 @@ impl Future for Main {
                 }
                 Err(e) => panic!("{e}"),
             }
+        }
+
+        None
+    }
+}
+
+impl Future for Handler {
+    type Output = ();
+
+    fn poll(&mut self, waker: Waker) -> Option<Self::Output> {
+        if let HandlerState::Start = self.state {
+            // start by registering our connection for notifications
+            REACTOR.with(|reactor| {
+                reactor.add(self.connection.as_raw_fd(), waker);
+            });
+
+            self.state = HandlerState::Read {
+                request: [0u8; 1024],
+                read: 0,
+            };
         }
 
         None
