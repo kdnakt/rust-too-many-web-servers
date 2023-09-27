@@ -21,6 +21,7 @@ use std::net::{
 use std::io::{
     ErrorKind,
     Read,
+    Write,
 };
 
 // fn spawn<T: Task>(task: T);
@@ -182,6 +183,7 @@ enum HandlerState {
         response: &'static [u8],
         written: usize,
     },
+    Flush,
 }
 
 impl Future for Main {
@@ -267,6 +269,21 @@ impl Future for Handler {
                 response: response.as_bytes(),
                 written: 0,
             };
+        }
+
+        if let HandlerState::Write { response, written } = &mut self.state {
+            loop {
+                match self.connection.write(&response[*written..]) {
+                    Ok(0) => println!("client disconnected unexpectedly"),
+                    Ok(n) => *written += n,
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => continue,
+                    Err(e) => panic!("{e}"),
+                }
+                if *written == response.len() {
+                    break;
+                }
+            }
+            self.state = HandlerState::Flush;
         }
 
         None
