@@ -286,6 +286,14 @@ impl Future for Handler {
             self.state = HandlerState::Flush;
         }
 
+        if let HandlerState::Flush = self.state {
+            match self.connection.flush() {
+                Ok(_) => {}
+                Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
+                Err(e) => panic!("{e}"),
+            }
+        }
+
         None
     }
 }
