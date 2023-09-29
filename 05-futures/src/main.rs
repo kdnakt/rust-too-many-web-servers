@@ -294,6 +294,10 @@ impl Future for Handler {
             }
         }
 
-        None
+        REACTOR.with(|reactor| {
+            reactor.remove(self.connection.as_raw_fd());
+        });
+
+        Some(())
     }
 }
