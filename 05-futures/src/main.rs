@@ -301,3 +301,20 @@ impl Future for Handler {
         Some(())
     }
 }
+
+fn poll_fn<F, T>(f: F) -> impl Future<Output = T>
+where F: FnMut(Waker) -> Option<T>,
+{
+    struct FromFn<F>(F);
+
+    impl<F, T> Future for FromFn<F>
+    where F: FnMut(Waker) -> Option<T>,
+    {
+        type Output = T;
+        fn poll(&mut self, waker: Waker) -> Option<Self::Output> {
+            (self.0)(waker)
+        }
+    }
+
+    FromFn(f)
+}
