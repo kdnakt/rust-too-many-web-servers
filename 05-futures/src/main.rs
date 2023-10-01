@@ -318,3 +318,19 @@ where F: FnMut(Waker) -> Option<T>,
 
     FromFn(f)
 }
+
+fn listen() -> impl Future<Output = ()> {
+    let start = poll_fn(|waker| {
+        let listener = TcpListener::bind("localhost:3000").unwrap();
+
+        listener.set_nonblocking(true).unwrap();
+
+        REACTOR.with(|reactor| {
+            reactor.add(listener.as_raw_fd(), waker);
+        });
+
+        Some(listener)
+    });
+
+    // TODO
+}
