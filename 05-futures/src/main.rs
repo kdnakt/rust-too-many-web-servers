@@ -332,5 +332,20 @@ fn listen() -> impl Future<Output = ()> {
         Some(listener)
     });
 
+    let accept = poll_fn(|_| match listener.accept() {
+        Ok((connection, _)) => {
+            connection.set_nonblocking(true).unwrap();
+
+            SCHEDULER.spawn(Handler {
+                connection,
+                state: HandlerState::Start,
+            });
+
+            None
+        }
+        Err(e) if e.kind() == ErrorKind::WouldBlock => None,
+        Err(e) => panic!("{e}"),
+    });
+
     // TODO
 }
