@@ -42,6 +42,11 @@ trait Future {
 
     // fn poll(&mut self) -> Option<Self::Output>;
     fn poll(&mut self, waker: Waker) -> Option<Self::Output>;
+
+    // fn chain<F, T>(self, chain: F) -> Chain<Self, F, T>
+    // where F: FnOnce(Self::Output) -> T,
+    //     T: Future,
+    //     Self: Sized;
 }
 
 type SharedTask = Arc<Mutex<dyn Future<Output = ()> + Send>>;
@@ -302,6 +307,35 @@ impl Future for Handler {
     }
 }
 
+impl<T1, F, T2> Future for Chain<T1, F, T2>
+where
+    T1: Future,
+    F: FnOnce(T1::Output) -> T2,
+    T2: Future,
+{
+    type Output = T2::Output;
+
+    fn poll(&mut self, waker: Waker) -> Option<Self::Output> {
+        if let Chain::First { future1, transition } = self {
+            // poll the first future
+            match future1.poll(waker.clone()) {
+                Some(value) => {
+                    // first future is done, transition into the second
+                    let future2 = (transition.take().unwrap())(value);
+                    *self = Chain::Second { future2 };
+                }
+                None => return None,
+            }
+        }
+
+        if let Chain::Second { future2 } = self {
+            return future2.poll(waker);
+        }
+
+        None
+    }
+}
+
 fn poll_fn<F, T>(f: F) -> impl Future<Output = T>
 where F: FnMut(Waker) -> Option<T>,
 {
@@ -319,6 +353,11 @@ where F: FnMut(Waker) -> Option<T>,
     FromFn(f)
 }
 
+enum Chain<T1, F, T2> {
+    First { future1: T1, transition: Option<F> },
+    Second { future2: T2 },
+}
+
 fn listen() -> impl Future<Output = ()> {
     let start = poll_fn(|waker| {
         let listener = TcpListener::bind("localhost:3000").unwrap();
@@ -332,7 +371,7 @@ fn listen() -> impl Future<Output = ()> {
         Some(listener)
     });
 
-    let accept = poll_fn(|_| match listener.accept() {
+    let accept = poll_fn(|waker| match start.poll(waker).unwrap().accept() {
         Ok((connection, _)) => {
             connection.set_nonblocking(true).unwrap();
 
