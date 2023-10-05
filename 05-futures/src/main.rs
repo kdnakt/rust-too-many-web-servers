@@ -43,10 +43,16 @@ trait Future {
     // fn poll(&mut self) -> Option<Self::Output>;
     fn poll(&mut self, waker: Waker) -> Option<Self::Output>;
 
-    // fn chain<F, T>(self, chain: F) -> Chain<Self, F, T>
-    // where F: FnOnce(Self::Output) -> T,
-    //     T: Future,
-    //     Self: Sized;
+    fn chain<F, T>(self, chain: F) -> Chain<Self, F, T>
+    where F: FnOnce(Self::Output) -> T,
+        T: Future,
+        Self: Sized,
+    {
+        Chain::First {
+            future1: self,
+            transition: Some(chain),
+        }
+    }
 }
 
 type SharedTask = Arc<Mutex<dyn Future<Output = ()> + Send>>;
@@ -359,7 +365,7 @@ enum Chain<T1, F, T2> {
 }
 
 fn listen() -> impl Future<Output = ()> {
-    let start = poll_fn(|waker| {
+    poll_fn(|waker| {
         let listener = TcpListener::bind("localhost:3000").unwrap();
 
         listener.set_nonblocking(true).unwrap();
@@ -369,22 +375,21 @@ fn listen() -> impl Future<Output = ()> {
         });
 
         Some(listener)
-    });
+    })
+    .chain(|listener| {
+        poll_fn(move |waker| match listener.accept() {
+            Ok((connection, _)) => {
+                connection.set_nonblocking(true).unwrap();
 
-    let accept = poll_fn(|waker| match start.poll(waker).unwrap().accept() {
-        Ok((connection, _)) => {
-            connection.set_nonblocking(true).unwrap();
+                SCHEDULER.spawn(Handler {
+                    connection,
+                    state: HandlerState::Start,
+                });
 
-            SCHEDULER.spawn(Handler {
-                connection,
-                state: HandlerState::Start,
-            });
-
-            None
-        }
-        Err(e) if e.kind() == ErrorKind::WouldBlock => None,
-        Err(e) => panic!("{e}"),
-    });
-
-    // TODO
+                None
+            }
+            Err(e) if e.kind() == ErrorKind::WouldBlock => None,
+            Err(e) => panic!("{e}"),
+       })
+    })
 }
