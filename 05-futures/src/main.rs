@@ -393,3 +393,12 @@ fn listen() -> impl Future<Output = ()> {
        })
     })
 }
+
+fn handle(connection: TcpStream) -> impl Future<Output = ()> {
+    poll_fn(move |waker| {
+        REACTOR.with(|reactor| {
+            reactor.add(connection.as_raw_fd(), waker);
+        });
+        Some(())
+    })
+}
