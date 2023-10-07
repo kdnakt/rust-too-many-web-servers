@@ -427,4 +427,48 @@ fn handle(mut connection: TcpStream) -> impl Future<Output = ()> {
             Some(())
         })
     })
+    .chain(move |_| {
+        let response = concat!(
+            "HTTP/1.1 200 OK\r\n",
+            "Content-Length: 12\r\n",
+            "Connection: close\r\n",
+            "\r\n",
+            "Hello world!"
+        );
+        let mut written = 0;
+
+        poll_fn(move |_| {
+            loop {
+                match connection.write(response[written..].as_bytes()) {
+                    Ok(0) => {
+                        println!("client disconnected unexpectedly");
+                        return Some(());
+                    }
+                    Ok(n) => written += n,
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
+                    Err(e) => panic!("{e}"),
+                }
+                if written == response.len() {
+                    break;
+                }
+            }
+            Some(())
+        })
+    })
+    .chain(move |_| {
+        poll_fn(move |_| {
+            match connection.flush() {
+                Ok(_) => {}
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    return None;
+                }
+                Err(e) => panic!("{e}"),
+            }
+
+            REACTOR.with(|reactor| {
+                reactor.remove(connection.as_raw_fd());
+            });
+            Some(())
+        })
+    })
 }
