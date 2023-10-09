@@ -179,6 +179,18 @@ enum Main {
     },
 }
 
+struct WithData<D, F> {
+    data: D,
+    future: F,
+}
+
+impl<D, F> WithData<D, F> {
+    pub fn new(data: D, construct: impl Fn(&D) -> F) -> WithData<D, F> {
+        let future = construct(&data);
+        WithData { data, future }
+    }
+}
+
 struct Handler {
     connection: TcpStream,
     state: HandlerState,
