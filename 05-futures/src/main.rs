@@ -418,80 +418,82 @@ fn listen() -> impl Future<Output = ()> {
 }
 
 fn handle(mut connection: TcpStream) -> impl Future<Output = ()> {
-    poll_fn(move |waker| {
-        REACTOR.with(|reactor| {
-            reactor.add(connection.as_raw_fd(), waker);
-        });
-        Some(())
-    })
-    .chain(move |_| {
-        let mut read = 0;
-        let mut request = [0u8; 1024];
-
-        poll_fn(move |_| {
-            loop {
-                // try reading from the stream
-                match connection.read(&mut request[read..]) {
-                    Ok(0) => {
-                        println!("client disconnected unexpectedly");
-                        return Some(());
-                    }
-                    Ok(n) => read += n,
-                    Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
-                    Err(e) => panic!("{e}"),
-                }
-                let read = read;
-                if read >= 4 && &request[read - 4..read] == b"\r\n\r\n" {
-                    break;
-                }
-            }
-            let request = String::from_utf8_lossy(&request[..read]);
-            println!("{request}");
-            Some(())
-        })
-    })
-    .chain(move |_| {
-        let response = concat!(
-            "HTTP/1.1 200 OK\r\n",
-            "Content-Length: 12\r\n",
-            "Connection: close\r\n",
-            "\r\n",
-            "Hello world!"
-        );
-        let mut written = 0;
-
-        poll_fn(move |_| {
-            loop {
-                match connection.write(response[written..].as_bytes()) {
-                    Ok(0) => {
-                        println!("client disconnected unexpectedly");
-                        return Some(());
-                    }
-                    Ok(n) => written += n,
-                    Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
-                    Err(e) => panic!("{e}"),
-                }
-                if written == response.len() {
-                    break;
-                }
-            }
-            Some(())
-        })
-    })
-    .chain(move |_| {
-        poll_fn(move |_| {
-            match connection.flush() {
-                Ok(_) => {}
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                    return None;
-                }
-                Err(e) => panic!("{e}"),
-            }
-
+    WithData::new(connection, |connection| {
+        poll_fn(move |waker| {
             REACTOR.with(|reactor| {
-                reactor.remove(connection.as_raw_fd());
+                reactor.add(connection.as_raw_fd(), waker);
             });
             Some(())
+        })
+        .chain(move |_| {
+            let mut read = 0;
+            let mut request = [0u8; 1024];
+
+            poll_fn(move |_| {
+                loop {
+                    // try reading from the stream
+                    match connection.read(&mut request[read..]) {
+                        Ok(0) => {
+                            println!("client disconnected unexpectedly");
+                            return Some(());
+                        }
+                        Ok(n) => read += n,
+                        Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
+                        Err(e) => panic!("{e}"),
+                    }
+                    let read = read;
+                    if read >= 4 && &request[read - 4..read] == b"\r\n\r\n" {
+                        break;
+                    }
+                }
+                let request = String::from_utf8_lossy(&request[..read]);
+                println!("{request}");
+                Some(())
+            })
+        })
+        .chain(move |_| {
+            let response = concat!(
+                "HTTP/1.1 200 OK\r\n",
+                "Content-Length: 12\r\n",
+                "Connection: close\r\n",
+                "\r\n",
+                "Hello world!"
+            );
+            let mut written = 0;
+
+            poll_fn(move |_| {
+                loop {
+                    match connection.write(response[written..].as_bytes()) {
+                        Ok(0) => {
+                            println!("client disconnected unexpectedly");
+                            return Some(());
+                        }
+                        Ok(n) => written += n,
+                        Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
+                        Err(e) => panic!("{e}"),
+                    }
+                    if written == response.len() {
+                        break;
+                    }
+                }
+                Some(())
+            })
+        })
+        .chain(move |_| {
+            poll_fn(move |_| {
+                match connection.flush() {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                        return None;
+                    }
+                    Err(e) => panic!("{e}"),
+                }
+
+                REACTOR.with(|reactor| {
+                    reactor.remove(connection.as_raw_fd());
+                });
+                Some(())
+            })
         })
     })
 }
