@@ -191,6 +191,17 @@ impl<D, F> WithData<D, F> {
     }
 }
 
+impl<D, F> Future for WithData<D, F>
+where
+    F: Future,
+{
+    type Output = F::Output;
+
+    fn poll(&mut self, waker: Waker) -> Option<Self::Output> {
+        self.future.poll(waker)
+    }
+}
+
 struct Handler {
     connection: TcpStream,
     state: HandlerState,
