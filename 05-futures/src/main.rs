@@ -179,9 +179,10 @@ enum Main {
     },
 }
 
-struct WithData<D, F> {
+struct WithData<'data, D, F> {
     data: D,
     future: F,
+    _data: PhantomData<&'data D>,
 }
 
 impl<D, F> WithData<D, F> {
