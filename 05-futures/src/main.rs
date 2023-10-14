@@ -186,16 +186,22 @@ struct WithData<'data, D, F> {
     _data: PhantomData<&'data D>,
 }
 
-impl<D, F> WithData<D, F> {
-    pub fn new(data: D, construct: impl Fn(&D) -> F) -> WithData<D, F> {
+impl<'data, D: 'data, F> WithData<'data, D, F>
+where
+    F: Future + 'data,
+{
+    pub fn new(
+        data: D,
+        construct: impl Fn(&'data D) -> F,
+    ) -> WithData<'data, D, F> {
         let future = construct(&data);
-        WithData { data, future }
+        WithData { data, future, _data: PhantomData }
     }
 }
 
-impl<D, F> Future for WithData<D, F>
+impl<'data, D, F> Future for WithData<'data, D, F>
 where
-    F: Future,
+    F: Future + 'data,
 {
     type Output = F::Output;
 
@@ -419,8 +425,8 @@ fn listen() -> impl Future<Output = ()> {
     })
 }
 
-fn handle(mut connection: TcpStream) -> impl Future<Output = ()> {
-    WithData::new(connection, |connection| {
+fn handle(connection: TcpStream) -> impl Future<Output = ()> {
+    WithData::new(connection, |mut connection| {
         poll_fn(move |waker| {
             REACTOR.with(|reactor| {
                 reactor.add(connection.as_raw_fd(), waker);
