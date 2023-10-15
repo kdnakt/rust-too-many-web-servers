@@ -24,6 +24,7 @@ use std::io::{
     Write,
 };
 use std::marker::PhantomData;
+// use std::rc::Rc;
 
 // fn spawn<T: Task>(task: T);
 // trait Task {}
@@ -408,14 +409,11 @@ fn listen() -> impl Future<Output = ()> {
         Some(listener)
     })
     .chain(|listener| {
-        poll_fn(move |waker| match listener.accept() {
+        poll_fn(move |_| match listener.accept() {
             Ok((connection, _)) => {
                 connection.set_nonblocking(true).unwrap();
 
-                SCHEDULER.spawn(Handler {
-                    connection,
-                    state: HandlerState::Start,
-                });
+                SCHEDULER.spawn(handle(connection));
 
                 None
             }
@@ -426,7 +424,11 @@ fn listen() -> impl Future<Output = ()> {
 }
 
 fn handle(connection: TcpStream) -> impl Future<Output = ()> {
-    WithData::new(connection, |mut connection| {
+    let connection = Arc::new(connection);
+    let read_connection_ref = connection.clone();
+    let write_connection_ref = connection.clone();
+    let flush_connection_ref = connection.clone();
+    // WithData::new(connection, |mut connection| {
         poll_fn(move |waker| {
             REACTOR.with(|reactor| {
                 reactor.add(connection.as_raw_fd(), waker);
@@ -438,6 +440,7 @@ fn handle(connection: TcpStream) -> impl Future<Output = ()> {
             let mut request = [0u8; 1024];
 
             poll_fn(move |_| {
+                let mut connection = &*read_connection_ref;
                 loop {
                     // try reading from the stream
                     match connection.read(&mut request[read..]) {
@@ -468,6 +471,7 @@ fn handle(connection: TcpStream) -> impl Future<Output = ()> {
                 "Hello world!"
             );
             let mut written = 0;
+            let mut connection = &*write_connection_ref;
 
             poll_fn(move |_| {
                 loop {
@@ -489,6 +493,7 @@ fn handle(connection: TcpStream) -> impl Future<Output = ()> {
         })
         .chain(move |_| {
             poll_fn(move |_| {
+                let mut connection = &*flush_connection_ref;
                 match connection.flush() {
                     Ok(_) => {}
                     Err(e) if e.kind() == ErrorKind::WouldBlock => {
@@ -503,5 +508,5 @@ fn handle(connection: TcpStream) -> impl Future<Output = ()> {
                 Some(())
             })
         })
-    })
+    // })
 }
