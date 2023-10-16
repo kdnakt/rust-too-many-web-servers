@@ -168,7 +168,8 @@ impl Reactor {
 fn main() {
     println!("Hello, world!");
     // write the tasks that our scheduler is going to run
-    SCHEDULER.spawn(Main::Start);
+    // SCHEDULER.spawn(Main::Start);
+    SCHEDULER.spawn(listen());
     SCHEDULER.run();
 }
 
