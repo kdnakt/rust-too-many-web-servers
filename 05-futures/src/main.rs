@@ -187,7 +187,7 @@ struct WithData<'data, D, F> {
     _data: PhantomData<&'data D>,
 }
 
-impl<'data, D: 'data, F> WithData<'data, D, F>
+impl<'data, D, F> WithData<'data, D, F>
 where
     F: Future + 'data,
 {
@@ -428,7 +428,7 @@ fn handle(connection: TcpStream) -> impl Future<Output = ()> {
     let read_connection_ref = connection.clone();
     let write_connection_ref = connection.clone();
     let flush_connection_ref = connection.clone();
-    // WithData::new(connection, |mut connection| {
+    WithData::new(connection, |mut connection| {
         poll_fn(move |waker| {
             REACTOR.with(|reactor| {
                 reactor.add(connection.as_raw_fd(), waker);
@@ -471,9 +471,9 @@ fn handle(connection: TcpStream) -> impl Future<Output = ()> {
                 "Hello world!"
             );
             let mut written = 0;
-            let mut connection = &*write_connection_ref;
 
             poll_fn(move |_| {
+                let mut connection = &*write_connection_ref;
                 loop {
                     match connection.write(response[written..].as_bytes()) {
                         Ok(0) => {
@@ -508,5 +508,5 @@ fn handle(connection: TcpStream) -> impl Future<Output = ()> {
                 Some(())
             })
         })
-    // })
+    })
 }
