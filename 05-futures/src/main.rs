@@ -175,12 +175,12 @@ fn main() {
 
 // An Async Server
 // enum as state mashines
-enum Main {
-    Start,
-    Accept {
-        listener: TcpListener,
-    },
-}
+// enum Main {
+//     Start,
+//     Accept {
+//         listener: TcpListener,
+//     },
+// }
 
 struct WithData<'data, D, F> {
     data: D,
@@ -230,6 +230,7 @@ enum HandlerState {
     Flush,
 }
 
+/**
 impl Future for Main {
     type Output = ();
 
@@ -345,6 +346,7 @@ impl Future for Handler {
         Some(())
     }
 }
+*/
 
 impl<T1, F, T2> Future for Chain<T1, F, T2>
 where
