@@ -428,8 +428,8 @@ fn listen() -> impl Future<Output = ()> {
 
 fn handle(con: TcpStream) -> impl Future<Output = ()> {
     let conn = Arc::new(Mutex::new(con));
-    // let rc_conn = Rc::new(conn);
-    // let read_connection_ref = conn.clone();
+    // let conn = Rc::new(con);
+    let read_connection_ref = conn.clone();
     // let write_connection_ref = conn.clone();
     // let flush_connection_ref = conn.clone();
     WithData::new(conn, |connection| {
@@ -444,7 +444,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
             let mut request = [0u8; 1024];
 
             poll_fn(move |_| {
-                // let connection = &*read_connection_ref;
+                let connection = &*read_connection_ref;
                 loop {
                     // try reading from the stream
                     match connection.lock().unwrap().read(&mut request[read..]) {
@@ -479,7 +479,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
             poll_fn(move |_| {
                 // let connection = &*write_connection_ref;
                 loop {
-                    match connection.lock().unwrap().write(response[written..].as_bytes()) {
+                    match connection.clone().lock().unwrap().write(response[written..].as_bytes()) {
                         Ok(0) => {
                             println!("client disconnected unexpectedly");
                             return Some(());
@@ -498,7 +498,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
         .chain(move |_| {
             poll_fn(move |_| {
                 // let connection = &*flush_connection_ref;
-                match connection.lock().unwrap().flush() {
+                match connection.clone().lock().unwrap().flush() {
                     Ok(_) => {}
                     Err(e) if e.kind() == ErrorKind::WouldBlock => {
                         return None;
@@ -508,7 +508,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
 
                 REACTOR.with(|reactor| {
                     // reactor.remove(flush_connection_ref.lock().unwrap().as_raw_fd());
-                    reactor.remove(connection.lock().unwrap().as_raw_fd());
+                    reactor.remove(connection.clone().lock().unwrap().as_raw_fd());
                 });
                 Some(())
             })
