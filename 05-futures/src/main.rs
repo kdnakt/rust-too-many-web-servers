@@ -427,27 +427,27 @@ fn listen() -> impl Future<Output = ()> {
 }
 
 fn handle(con: TcpStream) -> impl Future<Output = ()> {
-    let conn = Arc::new(Mutex::new(con));
+    // let conn = Arc::new(Mutex::new(con));
+    let mut conn = Some(con);
     // let conn = Rc::new(con);
-    let read_connection_ref = conn.clone();
+    // let read_connection_ref = conn.clone();
     // let write_connection_ref = conn.clone();
     // let flush_connection_ref = conn.clone();
-    WithData::new(conn, |connection| {
+    // WithData::new(conn, |connection| {
         poll_fn(move |waker| {
             REACTOR.with(|reactor| {
-                reactor.add(connection.lock().unwrap().as_raw_fd(), waker);
+                reactor.add(conn.as_ref().unwrap().as_raw_fd(), waker);
             });
-            Some(())
+            conn.take()
         })
-        .chain(move |_| {
+        .chain(move |mut connection| {
             let mut read = 0;
             let mut request = [0u8; 1024];
 
             poll_fn(move |_| {
-                let connection = &*read_connection_ref;
                 loop {
                     // try reading from the stream
-                    match connection.lock().unwrap().read(&mut request[read..]) {
+                    match connection.as_mut().unwrap().read(&mut request[read..]) {
                         Ok(0) => {
                             println!("client disconnected unexpectedly");
                             return Some(());
@@ -463,10 +463,10 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
                 }
                 let request = String::from_utf8_lossy(&request[..read]);
                 println!("{request}");
-                Some(())
+                connection.take()
             })
         })
-        .chain(move |_| {
+        .chain(move |mut connection| {
             let response = concat!(
                 "HTTP/1.1 200 OK\r\n",
                 "Content-Length: 12\r\n",
@@ -479,7 +479,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
             poll_fn(move |_| {
                 // let connection = &*write_connection_ref;
                 loop {
-                    match connection.clone().lock().unwrap().write(response[written..].as_bytes()) {
+                    match connection.as_mut().unwrap().write(response[written..].as_bytes()) {
                         Ok(0) => {
                             println!("client disconnected unexpectedly");
                             return Some(());
@@ -492,13 +492,12 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
                         break;
                     }
                 }
-                Some(())
+                connection.take()
             })
         })
-        .chain(move |_| {
+        .chain(move |mut connection| {
             poll_fn(move |_| {
-                // let connection = &*flush_connection_ref;
-                match connection.clone().lock().unwrap().flush() {
+                match connection.as_ref().unwrap().flush() {
                     Ok(_) => {}
                     Err(e) if e.kind() == ErrorKind::WouldBlock => {
                         return None;
@@ -508,10 +507,10 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
 
                 REACTOR.with(|reactor| {
                     // reactor.remove(flush_connection_ref.lock().unwrap().as_raw_fd());
-                    reactor.remove(connection.clone().lock().unwrap().as_raw_fd());
+                    reactor.remove(connection.as_ref().unwrap().as_raw_fd());
                 });
                 Some(())
             })
         })
-    })
+    // })
 }
