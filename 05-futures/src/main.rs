@@ -438,7 +438,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
             REACTOR.with(|reactor| {
                 reactor.add(conn.as_ref().unwrap().as_raw_fd(), waker);
             });
-            conn.take()
+            Some(conn.take())
         })
         .chain(move |mut connection| {
             let mut read = 0;
@@ -450,7 +450,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
                     match connection.as_mut().unwrap().read(&mut request[read..]) {
                         Ok(0) => {
                             println!("client disconnected unexpectedly");
-                            return Some(());
+                            return Some(connection.take());
                         }
                         Ok(n) => read += n,
                         Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
@@ -463,7 +463,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
                 }
                 let request = String::from_utf8_lossy(&request[..read]);
                 println!("{request}");
-                connection.take()
+                Some(connection.take())
             })
         })
         .chain(move |mut connection| {
@@ -482,7 +482,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
                     match connection.as_mut().unwrap().write(response[written..].as_bytes()) {
                         Ok(0) => {
                             println!("client disconnected unexpectedly");
-                            return Some(());
+                            return Some(connection.take());
                         }
                         Ok(n) => written += n,
                         Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
@@ -492,7 +492,7 @@ fn handle(con: TcpStream) -> impl Future<Output = ()> {
                         break;
                     }
                 }
-                connection.take()
+                Some(connection.take())
             })
         })
         .chain(move |mut connection| {
