@@ -182,6 +182,7 @@ fn main() {
 //     },
 // }
 
+/*
 struct WithData<'data, D, F> {
     data: D,
     future: F,
@@ -211,6 +212,7 @@ where
         self.future.poll(waker)
     }
 }
+*/
 
 struct Handler {
     connection: TcpStream,
