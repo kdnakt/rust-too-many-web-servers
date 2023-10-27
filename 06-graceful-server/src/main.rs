@@ -34,10 +34,12 @@ fn spawn_blocking(blocking_work: impl FnOnce() + Send + 'static) -> impl Future<
     });
 
     poll_fn(move |waker| match &mut *state.lock().unwrap() {
+        // work is not completed, store our waker and come back later
         (false, state) => {
             *state = Some(waker);
             None
         }
+        // the work is completed
         (true, _) => Some(()),
     })
 }
