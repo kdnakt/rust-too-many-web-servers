@@ -33,9 +33,12 @@ fn spawn_blocking(blocking_work: impl FnOnce() + Send + 'static) -> impl Future<
         }
     });
 
-    poll_fn(|waker| {
-        // TODO
-        None
+    poll_fn(move |waker| match &mut *state.lock().unwrap() {
+        (false, state) => {
+            *state = Some(waker);
+            None
+        }
+        (true, _) => Some(()),
     })
 }
 
