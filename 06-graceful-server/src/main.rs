@@ -9,9 +9,11 @@ fn main() {
     println!("Hello, world!");
 }
 
-fn ctrl_c() {
-    let mut signal = Signals::new(&[SIGINT]).unwrap();
-    let _ctrl_c = signal.forever().next().unwrap(); // blocks the thread...
+fn ctrl_c() -> impl Future<Output = ()> {
+    spawn_blocking(|| {
+        let mut signal = Signals::new(&[SIGINT]).unwrap();
+        let _ctrl_c = signal.forever().next().unwrap(); // blocks the thread...
+    })
 }
 
 fn spawn_blocking(blocking_work: impl FnOnce() + Send + 'static) -> impl Future<Output = ()> {
