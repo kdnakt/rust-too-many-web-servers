@@ -46,6 +46,36 @@ fn spawn_blocking(blocking_work: impl FnOnce() + Send + 'static) -> impl Future<
     })
 }
 
+struct Select<L, R> {
+    left: L,
+    right: R
+}
+
+fn select<L, R>(left: L, right: R) -> Select<L, R> {
+    Select { left, right }
+}
+
+enum Either<L, R> {
+    Left(L),
+    Right(R)
+}
+
+impl<L: Future, R: Future> Future for Select<L, R> {
+    type Output = Either<L::Output, R::Output>;
+
+    fn poll(&mut self, waker: Waker) -> Option<Self::Output> {
+        if let Some(output) = self.left.poll(waker.clone()) {
+            return Some(Either::Left(output));
+        }
+
+        if let Some(output) = self.right.poll(waker) {
+            return Some(Either::Right(output));
+        }
+
+        None
+    }
+}
+
 #[derive(Clone)]
 struct Waker(Arc<dyn Fn() + Send + Sync>);
 
