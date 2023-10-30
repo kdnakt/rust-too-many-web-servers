@@ -4,6 +4,25 @@ use std::sync::{
 };
 use signal_hook::consts::signal::SIGINT;
 use signal_hook::iterator::Signals;
+use std::io::ErrorKind;
+use std::net::{
+    TcpStream,
+    TcpListener,
+};
+use std::collections::{
+    HashMap,
+    VecDeque,
+};
+use std::cell::RefCell;
+use std::os::fd::{
+    AsRawFd,
+    RawFd,
+};
+use epoll::{
+    Event,
+    Events,
+    ControlOptions::EPOLL_CTL_ADD,
+};
 
 fn main() {
     println!("Hello, world!");
@@ -106,4 +125,195 @@ where F: FnMut(Waker) -> Option<T>,
     }
 
     PollFn(f)
+}
+
+
+fn listen() -> impl Future<Output = ()> {
+    poll_fn(|waker| {
+        let listener = TcpListener::bind("localhost:3000").unwrap();
+
+        listener.set_nonblocking(true).unwrap();
+
+        REACTOR.with(|reactor| {
+            reactor.add(listener.as_raw_fd(), waker);
+        });
+
+        Some(listener)
+    })
+    .chain(|listener| {
+        poll_fn(move |_| match listener.accept() {
+            Ok((connection, _)) => {
+                connection.set_nonblocking(true).unwrap();
+
+                SCHEDULER.spawn(handle(connection));
+
+                None
+            }
+            Err(e) if e.kind() == ErrorKind::WouldBlock => None,
+            Err(e) => panic!("{e}"),
+       })
+    })
+}
+
+fn handle(con: TcpStream) -> impl Future<Output = ()> {
+    let mut conn = Some(con);
+    poll_fn(move |waker| {
+        REACTOR.with(|reactor| {
+            reactor.add(conn.as_ref().unwrap().as_raw_fd(), waker);
+        });
+        Some(conn.take())
+    })
+    .chain(move |mut connection| {
+        let mut read = 0;
+        let mut request = [0u8; 1024];
+
+        poll_fn(move |_| {
+            loop {
+                // try reading from the stream
+                match connection.as_mut().unwrap().read(&mut request[read..]) {
+                    Ok(0) => {
+                        println!("client disconnected unexpectedly");
+                        return Some(connection.take());
+                    }
+                    Ok(n) => read += n,
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
+                    Err(e) => panic!("{e}"),
+                }
+                let read = read;
+                if read >= 4 && &request[read - 4..read] == b"\r\n\r\n" {
+                    break;
+                }
+            }
+            let request = String::from_utf8_lossy(&request[..read]);
+            println!("{request}");
+            Some(connection.take())
+        })
+    })
+    .chain(move |mut connection| {
+        let response = concat!(
+            "HTTP/1.1 200 OK\r\n",
+            "Content-Length: 12\r\n",
+            "Connection: close\r\n",
+            "\r\n",
+            "Hello world!"
+        );
+        let mut written = 0;
+
+        poll_fn(move |_| {
+            loop {
+                match connection.as_mut().unwrap().write(response[written..].as_bytes()) {
+                    Ok(0) => {
+                        println!("client disconnected unexpectedly");
+                        return Some(connection.take());
+                    }
+                    Ok(n) => written += n,
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
+                    Err(e) => panic!("{e}"),
+                }
+                if written == response.len() {
+                    break;
+                }
+            }
+            Some(connection.take())
+        })
+    })
+    .chain(move |mut connection| {
+        poll_fn(move |_| {
+            match connection.as_ref().unwrap().flush() {
+                Ok(_) => {}
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    return None;
+                }
+                Err(e) => panic!("{e}"),
+            }
+
+            REACTOR.with(|reactor| {
+                reactor.remove(connection.as_ref().unwrap().as_raw_fd());
+            });
+            Some(())
+        })
+    })
+}
+
+type SharedTask = Arc<Mutex<dyn Future<Output = ()> + Send>>;
+
+#[derive(Default)]
+struct Scheduler {
+    runnable: Mutex<VecDeque<SharedTask>>,
+}
+
+static SCHEDULER: Scheduler = Scheduler {
+    runnable: Mutex::new(VecDeque::new()),
+};
+
+impl Scheduler {
+    pub fn spawn(&self, task: impl Future<Output = ()> + Send + 'static) {
+        self.runnable.lock().unwrap().push_back(Arc::new(Mutex::new(task)));
+    }
+
+    pub fn run(&self) {
+        loop {
+            loop {
+                // pop a runnable task off the queue
+                let Some(task) = self.runnable.lock().unwrap().pop_front() else { break };
+                let t2 = task.clone();
+                // create a waker that pushes the task back on
+                let wake = Arc::new(move || {
+                    SCHEDULER.runnable.lock().unwrap().push_back(t2.clone());
+                });
+                // and poll it
+                task.lock().unwrap().poll(Waker(wake));
+            }
+            // if there are no runnable tasks, block on epoll until something becomes ready
+            REACTOR.with(|reactor| reactor.wait());
+        }
+    }
+}
+
+struct Reactor {
+    epoll: RawFd,
+    tasks: RefCell<HashMap<RawFd, Waker>>,
+}
+
+thread_local! {
+    static REACTOR: Reactor = Reactor::new();
+}
+
+impl Reactor {
+    pub fn new() -> Reactor {
+        Reactor {
+            epoll: epoll::create(false).unwrap(),
+            tasks: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// Add a file descriptor with read and write interest.
+    /// `waker` will be called when the descriptor becomes ready
+    pub fn add(&self, fd: RawFd, waker: Waker) {
+        let event = epoll::Event::new(Events::EPOLLIN | Events::EPOLLOUT, fd as u64);
+        epoll::ctl(self.epoll, EPOLL_CTL_ADD, fd, event).unwrap();
+        self.tasks.borrow_mut().insert(fd, waker);
+    }
+
+    /// Remove the given descriptor from epoll.
+    /// It will no longer receive any notifications.
+    pub fn remove(&self, fd: RawFd) {
+        self.tasks.borrow_mut().remove(&fd);
+    }
+
+    /// Drive tasks forward, blocking forever until an event arrives
+    pub fn wait(&self) {
+        let mut events = [Event::new(Events::empty(), 0); 1024];
+        let timeout = -1; // forever
+        let num_events = epoll::wait(self.epoll, timeout, &mut events).unwrap();
+
+        for event in &events[..num_events] {
+            let fd = event.data as i32;
+
+            // wake the task
+            if let Some(waker) = self.tasks.borrow().get(&fd) {
+                waker.wake();
+            }
+        }
+    }
 }
