@@ -30,6 +30,8 @@ use epoll::{
 
 fn main() {
     println!("Hello, world!");
+    SCHEDULER.spawn(listen());
+    SCHEDULER.run();
 }
 
 fn ctrl_c() -> impl Future<Output = ()> {
