@@ -191,7 +191,7 @@ fn listen() -> impl Future<Output = ()> {
         Some(listener)
     })
     .chain(|listener| {
-        poll_fn(move |_| match listener.accept() {
+        let listen = poll_fn(move |_| match listener.accept() {
             Ok((connection, _)) => {
                 connection.set_nonblocking(true).unwrap();
 
@@ -201,8 +201,15 @@ fn listen() -> impl Future<Output = ()> {
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => None,
             Err(e) => panic!("{e}"),
-       })
+       });
+
+       select(listen, ctrl_c())
     })
+    .chain|_ctrl_c| graceful_shutdown())
+}
+
+fn graceful_shutdown() -> impl Future<Output = ()> {
+    // TODO
 }
 
 fn handle(con: TcpStream) -> impl Future<Output = ()> {
