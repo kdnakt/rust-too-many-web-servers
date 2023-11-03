@@ -205,7 +205,7 @@ fn listen() -> impl Future<Output = ()> {
 
        select(listen, ctrl_c())
     })
-    .chain|_ctrl_c| graceful_shutdown())
+    .chain(|_ctrl_c| graceful_shutdown())
 }
 
 fn graceful_shutdown() -> impl Future<Output = ()> {
