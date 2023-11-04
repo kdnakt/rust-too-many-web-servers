@@ -27,6 +27,8 @@ use epoll::{
     Events,
     ControlOptions::EPOLL_CTL_ADD,
 };
+use std::time::Duration;
+use std::thread;
 
 fn main() {
     println!("Hello, world!");
@@ -201,15 +203,24 @@ fn listen() -> impl Future<Output = ()> {
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => None,
             Err(e) => panic!("{e}"),
-       });
+        });
 
-       select(listen, ctrl_c())
+        select(listen, ctrl_c())
     })
     .chain(|_ctrl_c| graceful_shutdown())
 }
 
 fn graceful_shutdown() -> impl Future<Output = ()> {
-    // TODO
+    let timer = spawn_blocking(|| thread::sleep(Duration::from_secs(30)));
+    // TODO: implement task counter
+    let request_counter = spawn_blocking(|| thread::sleep(Duration::from_secs(60)));
+
+    select(timer, request_counter).chain(|_| {
+        poll_fn(|waker| {
+            println!("Graceful shutdown complete");
+            std::process::exit(0)
+        })
+    })
 }
 
 fn handle(con: TcpStream) -> impl Future<Output = ()> {
