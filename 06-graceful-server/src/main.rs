@@ -235,6 +235,45 @@ fn graceful_shutdown() -> impl Future<Output = ()> {
     })
 }
 
+#[derive(Default)]
+struct Counter {
+    state: Mutex<(usize, Option<Waker>)>,
+}
+
+impl Counter {
+    fn increment(&self) {
+        let (count, _) = &mut *self.state.lock().unwrap();
+        *count += 1;
+    }
+
+    fn decrement(&self) {
+        let (count, waker) = &mut *self.state.lock().unwrap();
+        *count -= 1;
+
+        // we were the last task
+        if *count == 0 {
+            // wake the waiting task
+            if let Some(waker) = waker.take() {
+                waker.wake();
+            }
+        }
+    }
+
+    fn wait_for_zero(self: Arc<Self>) -> impl Future<Output = ()> {
+        poll_fn(move |waker| {
+            match &mut *self.state.lock().unwrap() {
+                // work is completed
+                (0, _) => Some(()),
+                // work is not complete
+                (_, state) => {
+                    *state = Some(waker);
+                    None
+                }
+            }
+        })
+    }
+}
+
 fn handle(con: TcpStream) -> impl Future<Output = ()> {
     let mut conn = Some(con);
     poll_fn(move |waker| {
