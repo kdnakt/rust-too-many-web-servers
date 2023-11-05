@@ -181,6 +181,8 @@ where F: FnMut(Waker) -> Option<T>,
 }
 
 fn listen() -> impl Future<Output = ()> {
+    let tasks = Arc::new(Mutex::new(0));
+
     poll_fn(|waker| {
         let listener = TcpListener::bind("localhost:3000").unwrap();
 
@@ -197,7 +199,17 @@ fn listen() -> impl Future<Output = ()> {
             Ok((connection, _)) => {
                 connection.set_nonblocking(true).unwrap();
 
-                SCHEDULER.spawn(handle(connection));
+                // increment the counter
+                *tasks.lock().unwrap() += 1;
+                let handle_connection = handle(connection).chain(|_| {
+                    poll_fn(|_| {
+                        // decrement the counter
+                        *tasks.lock().unwrap() -= 1;
+                        Some(())
+                    })
+                });
+
+                SCHEDULER.spawn(handle_connection);
 
                 None
             }
