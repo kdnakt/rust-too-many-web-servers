@@ -181,7 +181,8 @@ where F: FnMut(Waker) -> Option<T>,
 }
 
 fn listen() -> impl Future<Output = ()> {
-    let tasks = Arc::new(Mutex::new(0));
+    let tasks = Arc::new(Counter::default());
+    let tasks_ref = tasks.clone();
 
     poll_fn(|waker| {
         let listener = TcpListener::bind("localhost:3000").unwrap();
@@ -200,11 +201,12 @@ fn listen() -> impl Future<Output = ()> {
                 connection.set_nonblocking(true).unwrap();
 
                 // increment the counter
-                *tasks.lock().unwrap() += 1;
+                tasks.increment();
+                let tasks = tasks.clone();
                 let handle_connection = handle(connection).chain(|_| {
                     poll_fn(|_| {
                         // decrement the counter
-                        *tasks.lock().unwrap() -= 1;
+                        tasks.decrement();
                         Some(())
                     })
                 });
@@ -219,19 +221,17 @@ fn listen() -> impl Future<Output = ()> {
 
         select(listen, ctrl_c())
     })
-    .chain(|_ctrl_c| graceful_shutdown())
+    .chain(|_ctrl_c| graceful_shutdown(tasks_ref))
 }
 
-fn graceful_shutdown() -> impl Future<Output = ()> {
-    let timer = spawn_blocking(|| thread::sleep(Duration::from_secs(30)));
-    // TODO: implement task counter
-    let request_counter = spawn_blocking(|| thread::sleep(Duration::from_secs(60)));
-
-    select(timer, request_counter).chain(|_| {
-        poll_fn(|waker| {
-            println!("Graceful shutdown complete");
-            std::process::exit(0)
-        })
+fn graceful_shutdown(tasks: Arc<Counter>) -> impl Future<Output = ()> {
+    poll_fn(|waker| {
+        let timer = spawn_blocking(|| thread::sleep(Duration::from_secs(30)));
+        let request_counter = tasks.wait_for_zero();
+        Some(select(timer, request_counter))
+    }).chain(|_| {
+        println!("Graceful shutdown complete");
+        std::process::exit(0)
     })
 }
 
