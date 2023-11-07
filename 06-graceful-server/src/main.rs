@@ -213,9 +213,9 @@ fn listen() -> impl Future<Output = ()> {
 
                 SCHEDULER.spawn(handle_connection);
 
-                None
+                None::<()>
             }
-            Err(e) if e.kind() == ErrorKind::WouldBlock => None,
+            Err(e) if e.kind() == ErrorKind::WouldBlock => None::<()>,
             Err(e) => panic!("{e}"),
         });
 
