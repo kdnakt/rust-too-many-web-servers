@@ -195,7 +195,7 @@ fn listen() -> impl Future<Output = ()> {
 
         Some(listener)
     })
-    .chain(|listener| {
+    .chain(move |listener| {
         let listen = poll_fn(move |_| match listener.accept() {
             Ok((connection, _)) => {
                 connection.set_nonblocking(true).unwrap();
@@ -204,7 +204,7 @@ fn listen() -> impl Future<Output = ()> {
                 tasks.increment();
                 let tasks = tasks.clone();
                 let handle_connection = handle(connection).chain(|_| {
-                    poll_fn(|_| {
+                    poll_fn(move |_| {
                         // decrement the counter
                         tasks.decrement();
                         Some(())
