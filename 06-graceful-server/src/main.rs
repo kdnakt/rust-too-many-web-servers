@@ -225,13 +225,14 @@ fn listen() -> impl Future<Output = ()> {
 }
 
 fn graceful_shutdown(tasks: Arc<Counter>) -> impl Future<Output = ()> {
-    poll_fn(|waker| {
-        let timer = spawn_blocking(|| thread::sleep(Duration::from_secs(30)));
-        let request_counter = tasks.wait_for_zero();
-        Some(select(timer, request_counter))
-    }).chain(|_| {
-        println!("Graceful shutdown complete");
-        std::process::exit(0)
+    let timer = spawn_blocking(|| thread::sleep(Duration::from_secs(30)));
+    let request_counter = tasks.wait_for_zero();
+    select(timer, request_counter)
+    .chain(|_| {
+        poll_fn(|waker| {
+            println!("Graceful shutdown complete");
+            std::process::exit(0)
+        })
     })
 }
 
