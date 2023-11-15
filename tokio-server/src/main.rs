@@ -1,3 +1,4 @@
+use tokio;
 use tokio::net::{
     TcpListener,
     TcpStream,
@@ -14,9 +15,11 @@ async fn main() {
     loop {
         let (connection, _) = listener.accept().await.unwrap();
 
-        if let Err(e) = handle_connection(connection).await {
-            println!("failed to handle connection: {e}");
-        }
+        tokio::spawn(async move {
+            if let Err(e) = handle_connection(connection).await {
+                println!("failed to handle connection: {e}");
+            }
+        });
     }
 }
 
