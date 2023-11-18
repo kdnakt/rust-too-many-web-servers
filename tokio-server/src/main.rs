@@ -3,7 +3,10 @@ use tokio::net::{
     TcpListener,
     TcpStream,
 };
-use tokio::io::AsyncReadExt;
+use tokio::io::{
+    AsyncReadExt,
+    AsyncWriteExt,
+};
 use std::io;
 
 // Spins up the runtime and runs the async code in main
@@ -44,5 +47,28 @@ async fn handle_connection(mut connection: TcpStream) -> io::Result<()> {
 
     let request = String::from_utf8_lossy(&request[..read]);
     println!("{request}");
+
+    let response = concat!(
+        "HTTP/1.1 200 OK\r\n",
+        "Content-Length: 12\r\n",
+        "Connection: close\r\n",
+        "\r\n",
+        "Hello world!"
+    );
+    let mut written = 0;
+
+    loop {
+        let num_bytes = connection.write(response[written..].as_bytes()).await?;
+        if num_bytes == 0 {
+            println!("client disconnected unexpectedly");
+            return Ok(());
+        }
+
+        written += num_bytes;
+        if written == response.len() {
+            break;
+        }
+    }
+
     Ok(())
 }
