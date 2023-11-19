@@ -7,7 +7,15 @@ use tokio::io::{
     AsyncReadExt,
     AsyncWriteExt,
 };
+use tokio::sync::Notify;
+use tokio::select;
+use tokio::signal::ctrl_c;
 use std::io;
+use std::sync::{
+    Arc,
+    atomic::AtomicUsize,
+};
+use std::time::Duration;
 
 // Spins up the runtime and runs the async code in main
 #[tokio::main]
@@ -15,15 +23,31 @@ async fn main() {
     println!("Hello, world!");
 
     let listener = TcpListener::bind("localhost:3000").await.unwrap();
+    let state = Arc::new((AtomicUsize::new(0), Notify::new()));
 
     loop {
-        let (connection, _) = listener.accept().await.unwrap();
-
-        tokio::spawn(async move {
-            if let Err(e) = handle_connection(connection).await {
-                println!("failed to handle connection: {e}");
+        select! {
+            // new incoming connection
+            result = listener.accept() => {
+                let (connection, _) = result.unwrap();
+                tokio::spawn(async move {
+                    if let Err(e) = handle_connection(connection).await {
+                        println!("failed to handle connection: {e}");
+                    }
+                });
             }
-        });
+            // ctrl+c signal
+            shutdown = ctrl_c() => {
+                let timer = tokio::time::sleep(Duration::from_secs(30));
+                let request_counter = state.1.notified();
+                select ! {
+                    _ = timer => {}
+                    _ = request_counter = {}
+                }
+                println!("Gracefully shutting down.");
+                return;
+            }
+        }
     }
 }
 
