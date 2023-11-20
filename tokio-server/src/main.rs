@@ -37,10 +37,10 @@ async fn main() {
                 });
             }
             // ctrl+c signal
-            shutdown = ctrl_c() => {
+            _shutdown = ctrl_c() => {
                 let timer = tokio::time::sleep(Duration::from_secs(30));
                 let request_counter = state.1.notified();
-                select ! {
+                select! {
                     _ = timer => {}
                     _ = request_counter = {}
                 }
