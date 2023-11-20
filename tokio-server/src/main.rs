@@ -13,7 +13,10 @@ use tokio::signal::ctrl_c;
 use std::io;
 use std::sync::{
     Arc,
-    atomic::AtomicUsize,
+    atomic::{
+        AtomicUsize,
+        Ordering,
+    },
 };
 use std::time::Duration;
 
@@ -30,9 +33,19 @@ async fn main() {
             // new incoming connection
             result = listener.accept() => {
                 let (connection, _) = result.unwrap();
+
+                let state = state.clone();
+                state.0.fetch_add(1, Ordering::Relaxed);
+
                 tokio::spawn(async move {
                     if let Err(e) = handle_connection(connection).await {
                         println!("failed to handle connection: {e}");
+                    }
+
+                    let count = state.0.fetch_sub(1, Ordering::Relaxed);
+                    if count == 1 {
+                        // we were the last active task
+                        state.1.notify_one();
                     }
                 });
             }
