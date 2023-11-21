@@ -53,10 +53,15 @@ async fn main() {
             _shutdown = ctrl_c() => {
                 let timer = tokio::time::sleep(Duration::from_secs(30));
                 let request_counter = state.1.notified();
-                select! {
-                    _ = timer => {}
-                    _ = request_counter = {}
+
+                // if the count isn't zero, we have to wait.
+                if state.0.load(Ordering::Relaxed) != 0 {
+                    select! {
+                        _ = timer => {}
+                        _ = request_counter = {}
+                    }
                 }
+
                 println!("Gracefully shutting down.");
                 return;
             }
