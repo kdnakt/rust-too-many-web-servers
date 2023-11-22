@@ -58,7 +58,7 @@ async fn main() {
                 if state.0.load(Ordering::Relaxed) != 0 {
                     select! {
                         _ = timer => {}
-                        _ = request_counter = {}
+                        _ = request_counter => {}
                     }
                 }
 
